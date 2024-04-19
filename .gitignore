@@ -1,1 +1,5 @@
 /target
+
+*.rb
+!formula_template.rb
+*.tar.gz
