@@ -37,8 +37,12 @@ enum Command {
     List,
 
     /// print worktree path
-    #[clap(alias = "path")]
-    PrintPath,
+    #[clap(alias = "pp")]
+    PrintPath {
+        /// Print the path of the current worktree
+        #[arg(long, short)]
+        current: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -59,7 +63,10 @@ function worktree-manager-go() {
             .to_string();
 
             if !no_alias {
-                bash += "\nalias wm=worktree-manager";
+                bash += r#"
+alias wm=worktree-manager
+alias wmg=worktree-manager-go
+                "#;
             }
 
             if !no_git_alias {
@@ -72,14 +79,45 @@ git config --global alias.wtrm "!worktree-manager remove"
 
             println!("{bash}");
         }
-        Command::PrintPath => {
+        Command::PrintPath { current } => {
             let worktrees = shell::list_worktrees();
+            // currentWorktree
+            let cwt = worktrees.iter().find(|wk| {
+                if let Ok(p) = shell::execute::<Vec<String>>("pwd", vec![]) {
+                    match String::from_utf8(p.stdout) {
+                        Ok(v) => {
+                            return v.trim_end() == wk.path;
+                        }
+                        _ => return false,
+                    }
+                }
 
-            let branch = Select::new(
-                "Delete a worktree",
-                worktrees.iter().map(|w| w.branch.clone()).collect(),
-            )
-            .prompt()?;
+                false
+            });
+
+            let branch_prompt = "Pick a worktree";
+            let branch = match (cwt, current) {
+                (Some(cwt), true) => cwt.branch.clone(),
+                (Some(cwt), false) => Select::new(
+                    branch_prompt,
+                    worktrees
+                        .iter()
+                        .filter_map(|w| {
+                            if w.path == cwt.path {
+                                return None;
+                            }
+
+                            Some(w.branch.clone())
+                        })
+                        .collect(),
+                )
+                .prompt()?,
+                _ => Select::new(
+                    branch_prompt,
+                    worktrees.iter().map(|w| w.branch.clone()).collect(),
+                )
+                .prompt()?,
+            };
 
             if let Some(wk) = worktrees.iter().find(|wk| wk.branch == branch) {
                 println!("{}", wk.path);
