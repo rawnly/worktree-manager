@@ -37,8 +37,7 @@ enum Command {
     List,
 
     /// print worktree path
-    #[clap(alias = "pp")]
-    PrintPath {
+    Pick {
         /// Print the path of the current worktree
         #[arg(long, short)]
         current: bool,
@@ -55,7 +54,7 @@ fn main() -> Result<()> {
         } => {
             let mut bash: String = r#"
 function worktree-manager-go() {
-    p="$(worktree-manager print-path)"
+    p="$(worktree-manager pick)"
 
     cd "$p"
 };
@@ -79,7 +78,7 @@ git config --global alias.wtrm "!worktree-manager remove"
 
             println!("{bash}");
         }
-        Command::PrintPath { current } => {
+        Command::Pick { current } => {
             let worktrees = shell::list_worktrees();
             // currentWorktree
             let cwt = worktrees.iter().find(|wk| {
@@ -96,11 +95,11 @@ git config --global alias.wtrm "!worktree-manager remove"
             });
 
             let branch_prompt = "Pick a worktree";
+
             let branch = match (cwt, current) {
                 (Some(cwt), true) => cwt.branch.clone(),
-                (Some(cwt), false) => Select::new(
-                    branch_prompt,
-                    worktrees
+                (Some(cwt), false) => {
+                    let options: Vec<String> = worktrees
                         .iter()
                         .filter_map(|w| {
                             if w.path == cwt.path {
@@ -109,9 +108,15 @@ git config --global alias.wtrm "!worktree-manager remove"
 
                             Some(w.branch.clone())
                         })
-                        .collect(),
-                )
-                .prompt()?,
+                        .collect();
+
+                    if options.is_empty() {
+                        println!("No other worktrees available");
+                        return Ok(());
+                    }
+
+                    Select::new(branch_prompt, options).prompt()?
+                }
                 _ => Select::new(
                     branch_prompt,
                     worktrees.iter().map(|w| w.branch.clone()).collect(),
