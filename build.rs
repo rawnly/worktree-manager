@@ -82,6 +82,8 @@ fn main() -> io::Result<()> {
             "https://github.com/rawnly/worktree-manager",
             "CLI to manage worktrees",
         )?;
+    } else {
+        println!("cargo:warning=Not building formula");
     }
 
     Ok(())
