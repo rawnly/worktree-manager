@@ -2,8 +2,12 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
 use inquire::Select;
+use shell::Shell;
+
+use crate::shell::generate_hook_script;
 
 mod shell;
+mod utils;
 
 #[derive(Debug, Clone, Parser)]
 #[clap(version)]
@@ -21,6 +25,8 @@ enum Command {
     GetRoot,
 
     Init {
+        shell: Shell,
+
         #[arg(long)]
         no_alias: bool,
 
@@ -49,34 +55,13 @@ fn main() -> Result<()> {
 
     match args.command {
         Command::Init {
+            shell,
             no_alias,
             no_git_alias,
         } => {
-            let mut bash: String = r#"
-function worktree-manager-go() {
-    p="$(worktree-manager pick)"
+            let script = generate_hook_script(shell, no_alias, no_git_alias);
 
-    cd "$p"
-};
-            "#
-            .to_string();
-
-            if !no_alias {
-                bash += r#"
-alias wm=worktree-manager
-alias wmg=worktree-manager-go
-                "#;
-            }
-
-            if !no_git_alias {
-                bash += r#"
-git config --global alias.wt "!worktree-manager"
-git config --global alias.wtls "!worktree-manager list"
-git config --global alias.wtrm "!worktree-manager remove"
-                "#
-            }
-
-            println!("{bash}");
+            println!("{script}");
         }
         Command::Pick { current } => {
             let worktrees = shell::list_worktrees();

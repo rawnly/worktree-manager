@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::ffi::OsStr;
 use std::io;
 use std::process::{Command, Output};
+use strum_macros::{Display, EnumString};
 
 #[derive(Debug, Serialize, Default)]
 pub struct Worktree {
@@ -102,4 +103,86 @@ pub fn list_worktrees() -> Vec<Worktree> {
     }
 
     worktrees
+}
+
+/// Enum representing supported shell types
+#[derive(Debug, Display, Clone, EnumString)]
+pub enum Shell {
+    #[strum(serialize = "bash")]
+    Bash,
+    #[strum(serialize = "zsh")]
+    Zsh,
+    #[strum(serialize = "fish")]
+    Fish,
+}
+
+/// Generates shell-specific script based on the shell type
+pub fn generate_hook_script(shell: Shell, no_alias: bool, no_git_alias: bool) -> String {
+    let git_snippet = r#"
+git config --global alias.wt "!worktree-manager"
+git config --global alias.wtls "!worktree-manager list"
+git config --global alias.wtrm "!worktree-manager remove"
+    "#;
+
+    let mut script: String;
+
+    match shell {
+        Shell::Bash => {
+            script = r#"
+function worktree-manager-go() {
+    p="$(worktree-manager pick)"
+
+    cd "$p"
+};
+            "#
+            .to_string();
+
+            if !no_alias {
+                script += r#"
+alias wm=worktree-manager
+alias wmg=worktree-manager-go
+                "#;
+            }
+        }
+        Shell::Zsh => {
+            script = r#"
+worktree-manager-go() {
+    p="$(worktree-manager pick)"
+
+    cd "$p"
+};
+            "#
+            .to_string();
+
+            if !no_alias {
+                script += r#"
+alias wm=worktree-manager
+alias wmg=worktree-manager-go
+                "#;
+            }
+        }
+        Shell::Fish => {
+            script = r#"
+function worktree-manager-go
+    set p (worktree-manager pick)
+
+    cd "$p"
+end;
+            "#
+            .to_string();
+
+            if !no_alias {
+                script += r#"
+alias wm 'worktree-manager'
+alias wmg 'worktree-manager-go'
+                "#;
+            }
+        }
+    }
+
+    if !no_git_alias {
+        script += git_snippet;
+    }
+
+    script
 }
