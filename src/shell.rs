@@ -1,5 +1,6 @@
 use anyhow::Result;
 use core::panic;
+use inquire::formatter::OptionFormatter;
 use serde::Serialize;
 use std::ffi::OsStr;
 use std::io;
@@ -13,24 +14,36 @@ pub struct Worktree {
 }
 
 pub fn worktree_root() -> Result<String> {
-    let pwd = std::env::var("PWD").unwrap();
-    let stdout = Command::new("git")
-        .args(["rev-parse", "--git-dir"])
-        .output()?
-        .stdout;
+    let output = Command::new("git")
+        .args(["rev-parse", "--git-common-dir"])
+        .output()?;
 
-    let value = String::from_utf8(stdout)?;
-    let value = value.trim();
+    let git_common = String::from_utf8(output.stdout)?.trim().to_string();
 
-    let parts: Vec<&str> = value.split('/').collect();
+    let git_common_path = if git_common.starts_with("/") {
+        std::path::PathBuf::from(git_common)
+    } else {
+        std::env::current_dir()?.join(&git_common)
+    };
 
-    if parts.len() <= 1 {
-        return Ok(pwd);
-    }
-
-    let path = parts[..parts.len() - 3].join("/");
+    let path = git_common_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("cannot find parent directory"))?
+        .to_string_lossy()
+        .to_string();
 
     Ok(path)
+
+    // let pwd = std::env::var("PWD").unwrap();
+    // let parts: Vec<&str> = value.split('/').collect();
+    //
+    // if parts.len() <= 1 {
+    //     return Ok(pwd);
+    // }
+    //
+    // let path = parts[..parts.len() - 3].join("/");
+    //
+    // Ok(path)
 }
 
 pub fn remove_worktree(wk: &Worktree, force: bool) -> Result<bool> {
@@ -66,6 +79,22 @@ where
     T::Item: AsRef<OsStr>,
 {
     Command::new(cmd).args(args).output()
+}
+
+pub fn add_worktree(
+    path: String,
+    branch: String,
+    create: bool,
+) -> anyhow::Result<(Worktree, String)> {
+    let data = if create {
+        execute("git", ["worktree", "add", &path, "-b", &branch])?
+    } else {
+        execute("git", ["worktree", "add", &path, &branch])?
+    };
+
+    let stdout = String::from_utf8(data.stdout)?;
+
+    Ok((Worktree { path, branch }, stdout))
 }
 
 pub fn list_worktrees() -> Vec<Worktree> {

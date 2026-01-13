@@ -34,6 +34,13 @@ enum Command {
         no_git_alias: bool,
     },
 
+    Add {
+        branch: String,
+
+        #[clap(short)]
+        b: bool,
+    },
+
     /// Remove worktree
     #[clap(alias = "rm")]
     Remove,
@@ -140,6 +147,27 @@ fn main() -> Result<()> {
             println!("Invalid worktree branch: {}", branch.yellow());
             return Ok(());
         }
+        Command::Add { b, branch } => {
+            let root = shell::worktree_root()?;
+            let wk_name = {
+                let mut words = vec![];
+
+                for _ in 0..2 {
+                    let w = random_word::get_len(4, random_word::Lang::En).unwrap_or_default();
+                    words.push(w);
+                }
+
+                // abcd-abcd
+                words.join("-")
+            };
+
+            let path = format!("{root}/{wk_name}");
+
+            let (wk, out) = shell::add_worktree(path, branch, b)?;
+
+            println!("Created {} @ {}", wk.branch, wk.path);
+            println!("{out}");
+        }
         Command::GetRoot => {
             println!("{}", shell::worktree_root()?)
         }
@@ -150,6 +178,7 @@ fn main() -> Result<()> {
             if args.json {
                 let json_str = serde_json::to_string(&worktrees).unwrap();
                 println!("{json_str}");
+                return Ok(());
             }
 
             for wk in worktrees {
