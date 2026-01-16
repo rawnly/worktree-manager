@@ -1,6 +1,6 @@
 use anyhow::Result;
 use core::panic;
-use inquire::formatter::OptionFormatter;
+use git2::{Repository, Worktree as GitWorktree};
 use serde::Serialize;
 use std::ffi::OsStr;
 use std::io;
@@ -14,16 +14,14 @@ pub struct Worktree {
 }
 
 pub fn worktree_root() -> Result<String> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--git-common-dir"])
-        .output()?;
+    let repo = Repository::open_from_env()?;
 
-    let git_common = String::from_utf8(output.stdout)?.trim().to_string();
+    let git_common = repo.commondir();
 
     let git_common_path = if git_common.starts_with("/") {
         std::path::PathBuf::from(git_common)
     } else {
-        std::env::current_dir()?.join(&git_common)
+        std::env::current_dir()?.join(git_common)
     };
 
     let path = git_common_path
@@ -33,17 +31,6 @@ pub fn worktree_root() -> Result<String> {
         .to_string();
 
     Ok(path)
-
-    // let pwd = std::env::var("PWD").unwrap();
-    // let parts: Vec<&str> = value.split('/').collect();
-    //
-    // if parts.len() <= 1 {
-    //     return Ok(pwd);
-    // }
-    //
-    // let path = parts[..parts.len() - 3].join("/");
-    //
-    // Ok(path)
 }
 
 pub fn remove_worktree(wk: &Worktree, force: bool) -> Result<bool> {
@@ -97,7 +84,7 @@ pub fn add_worktree(
     Ok((Worktree { path, branch }, stdout))
 }
 
-pub fn list_worktrees() -> Vec<Worktree> {
+pub fn list_worktrees() -> anyhow::Result<Vec<Worktree>> {
     let mut worktrees: Vec<Worktree> = vec![];
 
     let output = match execute("git", ["worktree", "list"]) {
@@ -131,7 +118,7 @@ pub fn list_worktrees() -> Vec<Worktree> {
         worktrees.push(wk)
     }
 
-    worktrees
+    Ok(worktrees)
 }
 
 /// Enum representing supported shell types

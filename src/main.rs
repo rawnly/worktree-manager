@@ -71,7 +71,7 @@ fn main() -> Result<()> {
             println!("{script}");
         }
         Command::Pick { current } => {
-            let worktrees = shell::list_worktrees();
+            let worktrees = shell::list_worktrees()?;
             // currentWorktree
             let cwt = worktrees.iter().find(|wk| {
                 if let Ok(p) = shell::execute::<Vec<String>>("pwd", vec![]) {
@@ -126,7 +126,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         Command::Remove => {
-            let worktrees = shell::list_worktrees();
+            let worktrees = shell::list_worktrees()?;
 
             let branch = Select::new(
                 "Delete a worktree",
@@ -172,7 +172,7 @@ fn main() -> Result<()> {
             println!("{}", shell::worktree_root()?)
         }
         Command::List => {
-            let worktrees = shell::list_worktrees();
+            let worktrees = shell::list_worktrees()?;
             let root = shell::worktree_root()?;
 
             if args.json {
