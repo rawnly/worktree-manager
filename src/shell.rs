@@ -81,6 +81,15 @@ pub fn add_worktree(
 
     let stdout = String::from_utf8(data.stdout)?;
 
+    if stdout.is_empty() {
+        let stderr = String::from_utf8(data.stderr)?;
+
+        return Err(anyhow::anyhow!(format!(
+            "Error adding worktree: {}",
+            stderr
+        )));
+    }
+
     Ok((Worktree { path, branch }, stdout))
 }
 

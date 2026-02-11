@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
+use indoc::formatdoc;
 use inquire::Select;
 use shell::Shell;
 
@@ -163,10 +164,19 @@ fn main() -> Result<()> {
 
             let path = format!("{root}/{wk_name}");
 
-            let (wk, out) = shell::add_worktree(path, branch, b)?;
+            let (wk, _) = shell::add_worktree(path, branch, b)?;
 
-            println!("Created {} @ {}", wk.branch, wk.path);
-            println!("{out}");
+            termimad::print_text(&formatdoc! {"
+                Successfully created _{name}_ with `{branch}`
+
+                ```
+                cd {name}
+                ```
+
+                ", 
+                name=wk_name,
+                branch=wk.branch
+            });
         }
         Command::GetRoot => {
             println!("{}", shell::worktree_root()?)
