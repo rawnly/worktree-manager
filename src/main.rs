@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use indoc::formatdoc;
 use inquire::Select;
+use joyful::{joyful, Options};
 use shell::Shell;
 
 use crate::shell::generate_hook_script;
@@ -150,17 +151,7 @@ fn main() -> Result<()> {
         }
         Command::Add { b, branch } => {
             let root = shell::worktree_root()?;
-            let wk_name = {
-                let mut words = vec![];
-
-                for _ in 0..2 {
-                    let w = random_word::get_len(4, random_word::Lang::En).unwrap_or_default();
-                    words.push(w);
-                }
-
-                // abcd-abcd
-                words.join("-")
-            };
+            let wk_name = joyful(Options::default()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             let path = format!("{root}/{wk_name}");
 
