@@ -2,9 +2,17 @@ use crate::Shell;
 use clap::{Parser, Subcommand};
 use strum::IntoEnumIterator;
 
+pub mod add;
 pub mod init;
+pub mod list;
+pub mod pick;
+pub mod remove;
 
+pub use add::exec as add;
 pub use init::exec as init;
+pub use list::exec as list;
+pub use pick::exec as pick;
+pub use remove::exec as remove;
 
 #[derive(Debug, Clone, Parser)]
 #[clap(version)]

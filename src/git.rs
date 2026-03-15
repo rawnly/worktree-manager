@@ -64,11 +64,7 @@ pub fn remove_worktree(wk: &Worktree, force: bool) -> Result<bool> {
 
     Ok(true)
 }
-pub fn add_worktree(
-    path: String,
-    branch: String,
-    create: bool,
-) -> anyhow::Result<(Worktree, String)> {
+pub fn add_worktree(path: &str, branch: &str, create: bool) -> anyhow::Result<(Worktree, String)> {
     let data = if create {
         shell::execute("git", ["worktree", "add", &path, "-b", &branch])?
     } else {
@@ -86,7 +82,13 @@ pub fn add_worktree(
         )));
     }
 
-    Ok((Worktree { path, branch }, stdout))
+    Ok((
+        Worktree {
+            path: path.to_string(),
+            branch: branch.to_string(),
+        },
+        stdout,
+    ))
 }
 pub fn list_worktrees() -> anyhow::Result<Vec<Worktree>> {
     let mut worktrees: Vec<Worktree> = vec![];
