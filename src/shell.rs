@@ -1,64 +1,10 @@
-use anyhow::Result;
-use core::panic;
-use git2::{Repository, Worktree as GitWorktree};
-use serde::Serialize;
+use indoc::formatdoc;
 use std::ffi::OsStr;
 use std::io;
 use std::process::{Command, Output};
 use strum_macros::{Display, EnumString};
 
-#[derive(Debug, Serialize, Default)]
-pub struct Worktree {
-    pub path: String,
-    pub branch: String,
-}
-
-pub fn worktree_root() -> Result<String> {
-    let repo = Repository::open_from_env()?;
-
-    let git_common = repo.commondir();
-
-    let git_common_path = if git_common.starts_with("/") {
-        std::path::PathBuf::from(git_common)
-    } else {
-        std::env::current_dir()?.join(git_common)
-    };
-
-    let path = git_common_path
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("cannot find parent directory"))?
-        .to_string_lossy()
-        .to_string();
-
-    Ok(path)
-}
-
-pub fn remove_worktree(wk: &Worktree, force: bool) -> Result<bool> {
-    let mut args = vec!["worktree", "remove", &wk.path];
-
-    if force {
-        args.push("--force");
-    }
-
-    let output = Command::new("git").args(&args).output()?;
-
-    if output.stdout.is_empty() {
-        let err = String::from_utf8(output.stderr)?;
-
-        if err.contains("--force") {
-            if inquire::Confirm::new("force delete?")
-                .with_default(false)
-                .prompt()?
-            {
-                return remove_worktree(wk, true);
-            } else {
-                return Ok(false);
-            };
-        }
-    }
-
-    Ok(true)
-}
+use crate::commands::list_commands;
 
 pub fn execute<T>(cmd: &str, args: T) -> io::Result<Output>
 where
@@ -68,71 +14,10 @@ where
     Command::new(cmd).args(args).output()
 }
 
-pub fn add_worktree(
-    path: String,
-    branch: String,
-    create: bool,
-) -> anyhow::Result<(Worktree, String)> {
-    let data = if create {
-        execute("git", ["worktree", "add", &path, "-b", &branch])?
-    } else {
-        execute("git", ["worktree", "add", &path, &branch])?
-    };
-
-    let stdout = String::from_utf8(data.stdout)?;
-
-    if stdout.is_empty() {
-        let stderr = String::from_utf8(data.stderr)?;
-
-        return Err(anyhow::anyhow!(format!(
-            "Error adding worktree: {}",
-            stderr
-        )));
-    }
-
-    Ok((Worktree { path, branch }, stdout))
-}
-
-pub fn list_worktrees() -> anyhow::Result<Vec<Worktree>> {
-    let mut worktrees: Vec<Worktree> = vec![];
-
-    let output = match execute("git", ["worktree", "list"]) {
-        Err(e) => panic!("Something is wrong: {:?}", e),
-        Ok(data) => String::from_utf8(data.stdout).unwrap(),
-    };
-
-    let parts: Vec<&str> = output.split('\n').collect();
-
-    for part in parts {
-        if part.is_empty() {
-            continue;
-        }
-
-        let mut wk = Worktree::default();
-
-        let items: Vec<&str> = part.splitn(2, ' ').collect();
-        if let Some(path) = items.first() {
-            wk.path = path.to_string()
-        }
-
-        if let Some(branch) = &part.split(' ').last() {
-            let branch = branch.replace(['[', ']'], "");
-            wk.branch = branch;
-        }
-
-        if wk.branch.is_empty() || wk.branch.starts_with('(') && wk.branch.ends_with(')') {
-            continue;
-        }
-
-        worktrees.push(wk)
-    }
-
-    Ok(worktrees)
-}
-
 /// Enum representing supported shell types
-#[derive(Debug, Display, Clone, EnumString)]
+#[derive(Debug, Default, Display, Clone, EnumString)]
 pub enum Shell {
+    #[default]
     #[strum(serialize = "bash")]
     Bash,
     #[strum(serialize = "zsh")]
@@ -141,73 +26,116 @@ pub enum Shell {
     Fish,
 }
 
-/// Generates shell-specific script based on the shell type
-pub fn generate_hook_script(shell: Shell, no_alias: bool, no_git_alias: bool) -> String {
-    let git_snippet = r#"
-git config --global alias.wt "!worktree-manager"
-git config --global alias.wtls "!worktree-manager list"
-git config --global alias.wtrm "!worktree-manager remove"
-    "#;
+pub fn detect() -> Option<Shell> {
+    let shell = std::env::var("SHELL").ok()?;
+    let shell_name = shell.rsplit('/').next().unwrap_or(shell.as_str());
 
-    let mut script: String;
+    match shell_name {
+        "zsh" => Some(Shell::Zsh),
+        "bash" => Some(Shell::Bash),
+        "fish" => Some(Shell::Fish),
+        _ => None,
+    }
+}
+
+/// Generates shell-specific script based on the shell type
+pub fn generate_hook(shell: Shell) -> String {
+    let binary_name = env!("CARGO_BIN_NAME");
+    let mut commands = list_commands();
+
+    commands.push("-v".to_string());
+    commands.push("--version".to_string());
+
+    commands.push("-h".to_string());
+    commands.push("--help".to_string());
+
+    let commands = commands.join("|");
 
     match shell {
-        Shell::Bash => {
-            script = r#"
-function worktree-manager-go() {
-    p="$(worktree-manager pick)"
+        Shell::Zsh => formatdoc! {r#"
+            # Side Project Manager - generated by: {binary_name} init zsh
+            function {binary_name}() {{
+                if [[ $# -eq 0 ]]; then
+                    local dir=$(command {binary_name} pick)
+                    if [[ -n "$dir" ]]; then
+                        cd "$dir"
+                    fi
+                    return
+                fi
 
-    cd "$p"
-};
-            "#
-            .to_string();
-
-            if !no_alias {
-                script += r#"
-alias wm=worktree-manager
-alias wmg=worktree-manager-go
-                "#;
-            }
+                local cmd="$1"
+                case "$cmd" in
+                    {commands})
+                        command {binary_name} "$@"
+                        ;;
+                    *)
+                        local dir=$(command {binary_name} pick "$@")
+                        if [[ -n "$dir" ]]; then
+                            cd "$dir"
+                        fi
+                        ;;
+                esac
+            }}
+        "#,
+        binary_name = binary_name,
+        commands = commands
         }
-        Shell::Zsh => {
-            script = r#"
-worktree-manager-go() {
-    p="$(worktree-manager pick)"
+        .to_string(),
 
-    cd "$p"
-};
-            "#
-            .to_string();
+        Shell::Bash => formatdoc! {r#"
+            # Side Project Manager - generated by: {binary_name} init bash
+            function {binary_name}() {{
+                if [[ $# -eq 0 ]]; then
+                    local dir=$(command {binary_name} pick)
+                    if [[ -n "$dir" ]]; then
+                        cd "$dir"
+                    fi
+                    return
+                fi
 
-            if !no_alias {
-                script += r#"
-alias wm=worktree-manager
-alias wmg=worktree-manager-go
-                "#;
-            }
+                local cmd="$1"
+                case "$cmd" in
+                    {commands})
+                        command {binary_name} "$@"
+                        ;;
+                    *)
+                        local dir=$(command {binary_name} pick "$@")
+                        if [[ -n "$dir" ]]; then
+                            cd "$dir"
+                        fi
+                        ;;
+                esac
+            }}
+        "#,
+        binary_name = binary_name,
+        commands = commands
         }
-        Shell::Fish => {
-            script = r#"
-function worktree-manager-go
-    set p (worktree-manager pick)
+        .to_string(),
 
-    cd "$p"
-end;
-            "#
-            .to_string();
+        Shell::Fish => formatdoc! {r#"
+            # Side Project Manager - generated by: {binary_name} init fish
+            function {binary_name} --wraps {binary_name}
+                set -l argc (builtin count $argv)
 
-            if !no_alias {
-                script += r#"
-alias wm 'worktree-manager'
-alias wmg 'worktree-manager-go'
-                "#;
-            }
+                if test $argc -eq 0
+                    set -l dir (command {binary_name} pick)
+                    and cd $dir
+                    return
+                end
+
+                set -l cmd $argv[1]
+                switch $cmd
+                    case {commands}
+                        command {binary_name} $argv
+                    case '*'
+                        set -l dir (command {binary_name} pick $argv)
+                        and cd $dir
+                end
+            end
+        "#,
+        binary_name = binary_name,
+        commands = commands.replace("|", " ")
         }
+        .to_string(),
     }
-
-    if !no_git_alias {
-        script += git_snippet;
-    }
-
-    script
 }

@@ -1,81 +1,31 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use colored::*;
 use indoc::formatdoc;
 use inquire::Select;
 use joyful::{joyful, Options};
 use shell::Shell;
 
-use crate::shell::generate_hook_script;
-
+mod commands;
+mod git;
 mod shell;
 mod utils;
 
-#[derive(Debug, Clone, Parser)]
-#[clap(version)]
-struct Args {
-    #[command(subcommand)]
-    command: Command,
-
-    #[arg(long, global = true)]
-    json: bool,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-enum Command {
-    #[clap(alias = "root")]
-    GetRoot,
-
-    Init {
-        shell: Shell,
-
-        #[arg(long)]
-        no_alias: bool,
-
-        #[arg(long)]
-        no_git_alias: bool,
-    },
-
-    Add {
-        branch: String,
-
-        #[clap(short)]
-        b: bool,
-    },
-
-    /// Remove worktree
-    #[clap(alias = "rm")]
-    Remove,
-
-    /// List available worktrees
-    #[clap(alias = "ls")]
-    List,
-
-    /// print worktree path
-    Pick {
-        /// Print the path of the current worktree
-        #[arg(long, short)]
-        current: bool,
-    },
-}
+use crate::{
+    commands::{Cli, Command},
+    git::Worktree,
+};
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let args = Cli::parse();
 
     match args.command {
-        Command::Init {
-            shell,
-            no_alias,
-            no_git_alias,
-        } => {
-            let script = generate_hook_script(shell, no_alias, no_git_alias);
-
-            println!("{script}");
-        }
+        Command::Init { shell } => commands::init(shell),
         Command::Pick { current } => {
-            let worktrees = shell::list_worktrees()?;
+            let worktrees = git::list_worktrees()?;
+
             // currentWorktree
-            let cwt = worktrees.iter().find(|wk| {
+            let current_worktree = worktrees.iter().find(|wk| {
                 if let Ok(p) = shell::execute::<Vec<String>>("pwd", vec![]) {
                     match String::from_utf8(p.stdout) {
                         Ok(v) => {
@@ -88,47 +38,36 @@ fn main() -> Result<()> {
                 false
             });
 
-            let branch_prompt = "Pick a worktree";
+            let mut options = worktrees.clone();
 
-            let branch = match (cwt, current) {
-                (Some(cwt), true) => cwt.branch.clone(),
-                (Some(cwt), false) => {
-                    let options: Vec<String> = worktrees
-                        .iter()
-                        .filter_map(|w| {
-                            if w.path == cwt.path {
-                                return None;
-                            }
+            if let Some(cwt) = current_worktree {
+                // remove current dir from the list
+                options.retain(|e| e.path != cwt.path);
 
-                            Some(w.branch.clone())
-                        })
-                        .collect();
-
-                    if options.is_empty() {
-                        println!("No other worktrees available");
-                        return Ok(());
-                    }
-
-                    Select::new(branch_prompt, options).prompt()?
+                if current {
+                    println!("{}", cwt.path)
                 }
-                _ => Select::new(
-                    branch_prompt,
-                    worktrees.iter().map(|w| w.branch.clone()).collect(),
-                )
-                .prompt()?,
-            };
+            }
 
-            if let Some(wk) = worktrees.iter().find(|wk| wk.branch == branch) {
-                println!("{}", wk.path);
+            if options.is_empty() {
+                let bin = env!("CARGO_BIN_NAME");
+
+                eprintln!("No worktrees.");
+                eprintln!("To get started run `{bin} add`");
 
                 return Ok(());
             }
 
-            println!("Invalid worktree branch: {}", branch.yellow());
+            fuzzy_scorer!(wk_scorer, Worktree);
+            let worktree = Select::new("Pick a worktree", options)
+                .with_scorer(wk_scorer)
+                .prompt()?;
+            println!("{}", worktree.path);
+
             return Ok(());
         }
         Command::Remove => {
-            let worktrees = shell::list_worktrees()?;
+            let worktrees = git::list_worktrees()?;
 
             let branch = Select::new(
                 "Delete a worktree",
@@ -137,7 +76,7 @@ fn main() -> Result<()> {
             .prompt()?;
 
             if let Some(wk) = worktrees.iter().find(|wk| wk.branch == branch) {
-                if shell::remove_worktree(wk, false)? {
+                if git::remove_worktree(wk, false)? {
                     println!("worktree removed successfully");
                 } else {
                     println!("failed to  removed worktree");
@@ -150,12 +89,12 @@ fn main() -> Result<()> {
             return Ok(());
         }
         Command::Add { b, branch } => {
-            let root = shell::worktree_root()?;
+            let root = git::worktree_root()?;
             let wk_name = joyful(Options::default()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             let path = format!("{root}/{wk_name}");
 
-            let (wk, _) = shell::add_worktree(path, branch, b)?;
+            let (wk, _) = git::add_worktree(path, branch, b)?;
 
             termimad::print_text(&formatdoc! {"
                 Successfully created _{name}_ with `{branch}`
@@ -170,11 +109,11 @@ fn main() -> Result<()> {
             });
         }
         Command::GetRoot => {
-            println!("{}", shell::worktree_root()?)
+            println!("{}", git::worktree_root()?)
         }
         Command::List => {
-            let worktrees = shell::list_worktrees()?;
-            let root = shell::worktree_root()?;
+            let worktrees = git::list_worktrees()?;
+            let root = git::worktree_root()?;
 
             if args.json {
                 let json_str = serde_json::to_string(&worktrees).unwrap();
