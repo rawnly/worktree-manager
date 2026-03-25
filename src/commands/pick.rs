@@ -41,17 +41,15 @@ pub fn exec(current: bool) -> Result<()> {
     }
 
     fuzzy_scorer!(wk_scorer, Worktree);
-    let worktree = match Select::new("Pick a worktree", options)
+    let result = Select::new("Pick a worktree", options)
         .with_scorer(wk_scorer)
-        .prompt()
-    {
-        Ok(wt) => wt,
-        Err(InquireError::OperationCanceled) | Err(InquireError::OperationInterrupted) => {
-            std::process::exit(130);
-        }
-        Err(e) => return Err(e.into()),
-    };
+        .prompt();
 
+    if let Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) = result {
+        std::process::exit(130);
+    }
+
+    let worktree = result?;
     println!("{}", worktree.path);
 
     Ok(())
