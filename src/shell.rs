@@ -2,9 +2,10 @@ use indoc::formatdoc;
 use std::ffi::OsStr;
 use std::io;
 use std::process::{Command, Output};
+use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumString};
 
-use crate::commands::list_commands;
+use crate::commands;
 
 pub fn execute<T>(cmd: &str, args: T) -> io::Result<Output>
 where
@@ -41,7 +42,7 @@ pub fn detect() -> Option<Shell> {
 /// Generates shell-specific script based on the shell type
 pub fn generate_hook(shell: Shell) -> String {
     let binary_name = env!("CARGO_BIN_NAME");
-    let mut commands = list_commands();
+    let mut commands: Vec<String> = commands::Command::iter().map(|c| c.to_string()).collect();
 
     commands.push("-V".to_string());
     commands.push("--version".to_string());

@@ -14,7 +14,7 @@ pub use list::exec as list;
 pub use pick::exec as pick;
 pub use remove::exec as remove;
 
-#[derive(Debug, Clone, Parser)]
+#[derive(Clone, Parser)]
 #[clap(version)]
 pub struct Cli {
     #[command(subcommand)]
@@ -24,7 +24,8 @@ pub struct Cli {
     pub json: bool,
 }
 
-#[derive(Subcommand, Debug, strum_macros::Display, strum::EnumIter, Clone)]
+#[derive(Subcommand, Clone, strum_macros::Display, strum::EnumIter)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Command {
     #[clap(alias = "root")]
     GetRoot,
