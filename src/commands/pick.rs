@@ -1,5 +1,5 @@
 use anyhow::Result;
-use inquire::Select;
+use inquire::{InquireError, Select};
 
 use crate::{fuzzy_scorer, git, shell, Worktree};
 
@@ -41,10 +41,15 @@ pub fn exec(current: bool) -> Result<()> {
     }
 
     fuzzy_scorer!(wk_scorer, Worktree);
-    let worktree = Select::new("Pick a worktree", options)
+    let result = Select::new("Pick a worktree", options)
         .with_scorer(wk_scorer)
-        .prompt()?;
+        .prompt();
 
+    if let Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) = result {
+        std::process::exit(130);
+    }
+
+    let worktree = result?;
     println!("{}", worktree.path);
 
     Ok(())
