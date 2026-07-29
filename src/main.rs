@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     match args.command {
         Command::Init { shell } => commands::init(shell),
         Command::Pick { current } => commands::pick(current)?,
-        Command::Remove => commands::remove()?,
+        Command::Remove => commands::remove().await?,
         Command::Add { b, branch } => commands::add(b, &branch)?,
         Command::GetRoot => println!("{}", git::worktree_root()?),
         Command::List => commands::list(args.json)?,
