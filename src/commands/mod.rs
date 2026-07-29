@@ -3,12 +3,14 @@ use clap::{Parser, Subcommand};
 use strum::IntoEnumIterator;
 
 pub mod add;
+pub mod add_multiple;
 pub mod init;
 pub mod list;
 pub mod pick;
 pub mod remove;
 
 pub use add::exec as add;
+pub use add_multiple::exec as add_multiple;
 pub use init::exec as init;
 pub use list::exec as list;
 pub use pick::exec as pick;
@@ -36,11 +38,13 @@ pub enum Command {
 
     #[clap(alias = "a")]
     Add {
-        branch: String,
+        branch: Option<String>,
 
         #[clap(short)]
         b: bool,
     },
+
+    AddMultiple,
 
     /// Remove worktree
     #[clap(alias = "rm")]

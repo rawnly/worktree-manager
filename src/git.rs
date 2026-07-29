@@ -66,9 +66,9 @@ pub fn remove_worktree(wk: &Worktree, force: bool) -> Result<bool> {
 }
 pub fn add_worktree(path: &str, branch: &str, create: bool) -> anyhow::Result<(Worktree, String)> {
     let data = if create {
-        shell::execute("git", ["worktree", "add", &path, "-b", &branch])?
+        shell::execute("git", ["worktree", "add", path, "-b", branch])?
     } else {
-        shell::execute("git", ["worktree", "add", &path, &branch])?
+        shell::execute("git", ["worktree", "add", path, branch])?
     };
 
     let stdout = String::from_utf8(data.stdout)?;
@@ -112,7 +112,7 @@ pub fn list_worktrees() -> anyhow::Result<Vec<Worktree>> {
             wk.path = path.to_string()
         }
 
-        if let Some(branch) = &part.split(' ').last() {
+        if let Some(branch) = part.split(' ').next_back() {
             let branch = branch.replace(['[', ']'], "");
             wk.branch = branch;
         }
@@ -125,4 +125,28 @@ pub fn list_worktrees() -> anyhow::Result<Vec<Worktree>> {
     }
 
     Ok(worktrees)
+}
+
+pub fn list_branches() -> Vec<String> {
+    let output = match shell::execute("git", ["branch", "--omit-empty"]) {
+        Err(e) => panic!("something is wrong: {:?}", e),
+        Ok(data) => String::from_utf8(data.stdout).unwrap(),
+    };
+
+    output
+        .split('\n')
+        .map(|s| s.replace("* ", "").trim().to_string())
+        .filter(|s| !s.trim().is_empty())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_list_branches() {
+        let result = list_branches();
+        assert!(!result.is_empty())
+    }
 }
