@@ -1,4 +1,3 @@
-use serde_yaml::from_reader;
 use std::fs;
 use std::path::{Path, PathBuf};
 
