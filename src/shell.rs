@@ -15,6 +15,14 @@ where
     Command::new(cmd).args(args).output()
 }
 
+pub fn execute_in_dir<T>(cmd: &str, args: T, dir: &str) -> io::Result<Output>
+where
+    T: IntoIterator,
+    T::Item: AsRef<OsStr>,
+{
+    Command::new(cmd).args(args).current_dir(dir).output()
+}
+
 /// Enum representing supported shell types
 #[derive(Debug, Default, Display, Clone, EnumString)]
 pub enum Shell {

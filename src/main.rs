@@ -4,6 +4,7 @@ use shell::Shell;
 
 mod commands;
 mod git;
+mod project_config;
 mod shell;
 mod utils;
 mod version_check;
